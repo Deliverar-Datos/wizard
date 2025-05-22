@@ -1,5 +1,9 @@
 #!/bin/bash
-echo "Instalando las librerías necesarias..."
-pip install -r requirements.txt
-echo "Instalación completada."
-read -p "Presiona Enter para salir..."
+
+# Script para instalar dependencias Python necesarias en Linux
+
+# Actualizar pip
+python3 -m pip install --upgrade pip
+
+# Instalar paquetes necesarios
+pip3 install pandas numpy holidays scikit-learn psycopg2-binary

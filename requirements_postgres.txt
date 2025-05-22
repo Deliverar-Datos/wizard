@@ -1,0 +1,5 @@
+pandas
+holidays
+scikit-learn
+openpyxl
+psycopg2-binary

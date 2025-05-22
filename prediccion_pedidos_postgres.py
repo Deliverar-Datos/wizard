@@ -12,7 +12,6 @@ import psycopg2
 from psycopg2 import sql
 import psycopg2.extras
 
-
 warnings.filterwarnings("ignore", message="X has feature names but DecisionTreeRegressor was fitted without feature names")
 
 # Crear objeto de feriados para Argentina
@@ -44,7 +43,7 @@ def preparar_datos(df, target):
     features = ['DiaSemana', 'EsFinDeSemana', 'DiaMes', 'Mes', 'Ano', 'Feriado',
                 f'{target}_MA_3', f'{target}_MA_7']
     X = df[features]
-    y = df[target]
+    y = df[target].fillna(0)
     return X, y
 
 def entrenar_modelo(X, y):
@@ -102,30 +101,59 @@ def guardar_en_postgresql(df):
         print(f"Error al guardar en PostgreSQL: {e}")
 
 def main():
-    # Cargar datos
-    df = pd.read_excel('Resumen_Pedidos_Estado.xlsx')
+    # Conexión a la base de datos PostgreSQL
+    conn_params = {
+        'host': '173.230.135.41',
+        'port': 5432,
+        'user': 'deliverar_user',
+        'password': 'unixunix',
+        'dbname': 'deliverar'
+    }
+    import psycopg2
+    import pandas as pd
+
+    query = """
+    SELECT
+        fecha_pedido AS Fecha,
+        estado AS Estado,
+        COUNT(*) AS CantidadPedidos
+    FROM fact_pedidos
+    WHERE LOWER(estado) IN ('entregado', 'cancelado')
+    GROUP BY fecha_pedido, estado
+    ORDER BY fecha_pedido
+    """
+
+    try:
+        with psycopg2.connect(**conn_params) as conn:
+            df = pd.read_sql_query(query, conn)
+    except Exception as e:
+        print(f"Error al leer datos de PostgreSQL: {e}")
+        return
 
     # Mostrar columnas para verificar nombres reales
-    print("Columnas en el archivo Excel:", df.columns.tolist())
+    print("Columnas en el DataFrame:", df.columns.tolist())
 
-    # Mostrar valores únicos en la columna Estado
-    print("Valores únicos en 'Estado':", df['Estado'].unique())
+    # Mostrar valores únicos en la columna estado
+    print("Valores únicos en 'estado':", df['estado'].unique())
 
     # Calcular total de pedidos por fecha
-    df_total = df.groupby('Fecha')['CantidadPedidos'].sum().reset_index().rename(columns={'CantidadPedidos': 'total'})
+    df_total = df.groupby('fecha')['cantidadpedidos'].sum().reset_index().rename(columns={'cantidadpedidos': 'total'})
 
     # Pivotar para entregados y cancelados
-    df_pivot = df.pivot_table(index='Fecha', columns='Estado', values='CantidadPedidos', aggfunc='sum').reset_index()
+    df_pivot = df.pivot_table(index='fecha', columns='estado', values='cantidadpedidos', aggfunc='sum').reset_index()
 
     # Renombrar columnas para entregados y cancelados
     df_pivot.columns.name = None
     df_pivot = df_pivot.rename(columns={
-        'Entregado': 'entregados',
-        'Cancelado': 'cancelados'
+        'ENTREGADO': 'entregados',
+        'CANCELADO': 'cancelados'
     })
 
     # Unir total con entregados y cancelados
-    df_final = pd.merge(df_total, df_pivot, on='Fecha', how='left')
+    df_final = pd.merge(df_total, df_pivot, on='fecha', how='left')
+
+    # Cambiar nombre de columna 'fecha' a 'Fecha' para compatibilidad con agregar_features
+    df_final = df_final.rename(columns={'fecha': 'Fecha'})
 
     # Validar que las columnas necesarias existan
     columnas_necesarias = ['Fecha', 'total', 'entregados', 'cancelados']
@@ -139,7 +167,7 @@ def main():
     # Entrenar modelos
     modelos = {}
     predicciones = pd.DataFrame()
-    predicciones['Fecha'] = df_pivot['Fecha']
+    predicciones['Fecha'] = df_pivot['fecha']
     predicciones['FechaGeneracion'] = datetime.now()
 
     resultados = {}
@@ -182,6 +210,15 @@ def main():
 
     # Seleccionar columnas para insertar en PostgreSQL
     predicciones = predicciones[['Fecha', 'TotalPredicho', 'EntregadosPredicho', 'CanceladosPredicho', 'FechaGeneracion']]
+
+    # Renombrar columnas para que coincidan con la tabla PostgreSQL
+    predicciones = predicciones.rename(columns={
+        'Fecha': 'fecha',
+        'TotalPredicho': 'total_predicho',
+        'EntregadosPredicho': 'entregados_predicho',
+        'CanceladosPredicho': 'cancelados_predicho',
+        'FechaGeneracion': 'fecha_generacion'
+    })
 
     # Guardar en PostgreSQL
     guardar_en_postgresql(predicciones)
