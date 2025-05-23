@@ -68,11 +68,11 @@ def predecir(modelo, X):
 def guardar_en_postgresql(df):
     # Datos de conexión
     conn_params = {
-        'host': '173.230.135.41',
+        'host': 'postgres.deliver.ar',
         'port': 5432,
-        'user': 'deliverar_user',
-        'password': 'unixunix',
-        'dbname': 'deliverar'
+        'user': 'integracion',
+        'password': 'gatopardo123',
+        'dbname': 'postgres'
     }
     try:
         conn = psycopg2.connect(**conn_params)
@@ -103,11 +103,11 @@ def guardar_en_postgresql(df):
 def main():
     # Conexión a la base de datos PostgreSQL
     conn_params = {
-        'host': '173.230.135.41',
+        'host': 'postgres.deliver.ar',
         'port': 5432,
-        'user': 'deliverar_user',
-        'password': 'unixunix',
-        'dbname': 'deliverar'
+        'user': 'integracion',
+        'password': 'gatopardo123',
+        'dbname': 'postgres'
     }
     import psycopg2
     import pandas as pd
@@ -220,8 +220,14 @@ def main():
         'FechaGeneracion': 'fecha_generacion'
     })
 
-    # Guardar en PostgreSQL
-    guardar_en_postgresql(predicciones)
+    # Filtrar predicciones para guardar solo las fechas mayores a la fecha actual
+    fecha_actual = pd.Timestamp(datetime.now().date())
+    # Convertir la columna 'fecha' a tipo datetime si no lo está
+    predicciones['fecha'] = pd.to_datetime(predicciones['fecha'])
+    predicciones_filtradas = predicciones[predicciones['fecha'] > fecha_actual]
+
+    # Guardar en PostgreSQL solo las predicciones filtradas
+    guardar_en_postgresql(predicciones_filtradas)
 
     # Mostrar intervalos de confianza y primeros 5 valores al final
     for target in ['total', 'entregados', 'cancelados']:
